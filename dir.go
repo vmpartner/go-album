@@ -16,6 +16,8 @@ type Dir struct {
 	Level      int
 	Path       string `gorm:"uniqueIndex"`
 	ParentPath string
+	IsCopy     bool `gorm:"default:false"`
+	IsAnalyze  bool `gorm:"default:false"`
 }
 
 func (d *Dir) Scan() error {
@@ -90,6 +92,12 @@ func (d *Dir) Scan() error {
 		}
 
 	}
+
+	//d.IsSync = true
+	//err = d.DB.Save(&d).Error
+	//if err != nil {
+	//	return errors.WithStack(err)
+	//}
 
 	return nil
 }
