@@ -7,6 +7,7 @@ require (
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible // indirect
 	github.com/pkg/errors v0.8.1
 	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd
+	gopkg.in/djherbis/times.v1 v1.2.0
 	gorm.io/driver/sqlite v1.1.3
 	gorm.io/gorm v1.20.2
 )

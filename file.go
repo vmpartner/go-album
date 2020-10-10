@@ -5,7 +5,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rwcarlsen/goexif/exif"
 	"github.com/rwcarlsen/goexif/mknote"
+	"gopkg.in/djherbis/times.v1"
 	"gorm.io/gorm"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -22,18 +24,26 @@ type File struct {
 	UpdatedAt time.Time
 	Parent    *Dir     `gorm:"-"`
 	DB        *gorm.DB `gorm:"-"`
-	Path      string `gorm:"uniqueIndex"`
+	Path      string   `gorm:"uniqueIndex"`
 	DirPath   string
 	MimeType  string
 	ExifModel string
 	ExifDate  time.Time
+	StatSize  int64
+	StatDate  time.Time
 }
 
 func (f *File) Save() error {
 
+	fs, err := os.Open(f.Path)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	defer fs.Close()
+
 	// Find dir in DB
 	var file File
-	err := f.DB.First(&file, "path = ?", f.Path).Error
+	err = f.DB.First(&file, "path = ?", f.Path).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return errors.WithStack(err)
 	}
@@ -51,21 +61,22 @@ func (f *File) Save() error {
 
 	switch file.MimeType {
 	case "image/png", "image/jpeg":
-
-		f, err := os.Open(file.Path)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		defer f.Close()
-
-		x, _ := exif.Decode(f)
+		x := ExifDecode(fs)
 		if x != nil {
 			file.ExifModel = ExifGet(x, exif.Model)
 			file.ExifDate, _ = x.DateTime()
 		}
 	}
 
-	// Get meta
+	// Get stat
+	stat, _ := fs.Stat()
+	file.StatSize = stat.Size()
+
+	// Stat date
+	t := times.Get(stat)
+	if t.HasBirthTime() {
+		file.StatDate = t.BirthTime()
+	}
 
 	// Save
 	err = f.DB.Save(&file).Error
@@ -75,6 +86,17 @@ func (f *File) Save() error {
 
 	log.Println(file.Path)
 	return nil
+}
+
+func ExifDecode(fs io.Reader) *exif.Exif {
+	defer func() {
+		if err := recover(); err != nil {
+			return
+		}
+	}()
+	x, _ := exif.Decode(fs)
+
+	return x
 }
 
 func ExifGet(x *exif.Exif, field exif.FieldName) string {

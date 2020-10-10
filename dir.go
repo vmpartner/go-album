@@ -29,7 +29,7 @@ func (d *Dir) Scan() error {
 
 	// Find dir in DB
 	var dir Dir
-	err := d.DB.First(&dir, "path = ?", parent.Path+"/"+d.Path).Error
+	err := d.DB.First(&dir, "path = ?", d.Path).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return errors.WithStack(err)
 	}
@@ -84,7 +84,7 @@ func (d *Dir) Scan() error {
 
 			dev++
 			if dev >= 100 {
-				break
+				//break
 			}
 
 		}
