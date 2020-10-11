@@ -4,8 +4,17 @@ import (
 	"github.com/pkg/errors"
 	"gorm.io/gorm"
 	"io/ioutil"
+	"path"
+	"regexp"
+	"strings"
 	"time"
 )
+
+var re2 *regexp.Regexp
+
+func init() {
+	re2, _ = regexp.Compile(`\d`)
+}
 
 type Dir struct {
 	ID         uint `gorm:"primarykey"`
@@ -16,6 +25,8 @@ type Dir struct {
 	Level      int
 	Path       string `gorm:"uniqueIndex"`
 	ParentPath string
+	RootName   string
+	LevelName  string
 	IsCopy     bool `gorm:"default:false"`
 	IsAnalyze  bool `gorm:"default:false"`
 }
@@ -40,6 +51,16 @@ func (d *Dir) Scan() error {
 	dir.Path = d.Path
 	dir.Level = parent.Level + 1
 	dir.ParentPath = parent.Path
+	if dir.Level == 2 {
+		dir.RootName = strings.TrimSpace(strings.Title(re2.ReplaceAllString(path.Base(dir.Path), "")))
+	} else {
+		dir.RootName = parent.RootName
+	}
+	if dir.Level == 3 {
+		dir.LevelName = strings.TrimSpace(strings.Title(path.Base(dir.Path)))
+	} else {
+		dir.LevelName = parent.LevelName
+	}
 
 	// Save
 	err = d.DB.Save(&dir).Error

@@ -1,17 +1,12 @@
 package main
 
 import (
-	"crypto/sha1"
-	"encoding/hex"
-	"fmt"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	"log"
 	"os"
 	"path"
-	"regexp"
-	"strconv"
 	"strings"
 )
 
@@ -52,9 +47,6 @@ func main() {
 	_ = db.AutoMigrate(&File{})
 	_ = db.AutoMigrate(&Dir{})
 
-	// Clear code
-	re, _ := regexp.Compile(`[^\p{L}\d_]+`)
-
 	// Dir
 	dir := Dir{
 		Level: 0,
@@ -66,29 +58,20 @@ func main() {
 		log.Printf("%+v\n", err)
 	}
 
+	return
+
 	// Copy files
 	var files []File
-	err = db.Find(&files, "is_copy = false AND stat_size > 250000 AND stat_size < 10000000").Error
+	err = db.Find(&files, "stat_size > 250000 AND stat_size < 10000000 AND mime_type != 'application/vnd.ms-powerpoint'").Error
 	if err != nil {
 		panic(err)
 	}
 	for _, file := range files {
 
-		// Generate target
-		fileDate := file.ExifDate
-		if fileDate.IsZero() {
-			fileDate = file.StatDate
-		}
+		file.DB = db
 
-		// Generate dest path
-		h := sha1.New()
-		h.Write([]byte(file.Path + strconv.Itoa(int(file.StatSize))))
-		fileHash := hex.EncodeToString(h.Sum(nil))
-		fileName := path.Base(file.Path)
-		fileName = strings.ReplaceAll(fileName, path.Ext(file.Path), "")
-		fileName = re.ReplaceAllString(fileName, "")
-		fileName = strings.ToLower(fmt.Sprintf("%s_%s%s", fileName, fileHash, path.Ext(file.Path)))
-		targetFile := fmt.Sprintf("%s/%d/%s/%s", target, fileDate.Year(), months.Replace(fileDate.Month().String()), fileName)
+		// Create path
+		targetFile := file.GeneratePath()
 		err := os.MkdirAll(path.Dir(targetFile), 777)
 		if err != nil {
 			panic(err)
@@ -98,6 +81,15 @@ func main() {
 		_, err = CopyFile(file.Path, targetFile)
 		if err != nil {
 			panic(err)
+		}
+
+		// Check file and size
+		destFile, err := os.Stat(targetFile)
+		if err != nil {
+			panic(err)
+		}
+		if destFile.Size() != file.StatSize {
+			panic("size not same")
 		}
 
 		// Update state
