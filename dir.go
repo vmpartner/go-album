@@ -61,6 +61,9 @@ func (d *Dir) Scan() error {
 	} else {
 		dir.LevelName = parent.LevelName
 	}
+	if dir.RootName == "Разное" {
+		return nil
+	}
 
 	// Save
 	err = d.DB.Save(&dir).Error

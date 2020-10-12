@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	source = "D:/photo/0 Unsorted"
-	target = "D:/photo/1 Autosort"
+	source = "D:/photo/"
+	target = "D:/sorted/"
 )
 
 var months *strings.Replacer
@@ -58,33 +58,39 @@ func main() {
 		log.Printf("%+v\n", err)
 	}
 
-	return
-
 	// Copy files
 	var files []File
-	err = db.Find(&files, "stat_size > 250000 AND stat_size < 10000000 AND mime_type != 'application/vnd.ms-powerpoint'").Error
+	err = db.Find(&files, `stat_size > 250000 AND mime_type NOT IN (
+       'font/ttf',
+       'application/pdf',
+       'application/zip',
+       'application/vnd.ms-excel',
+       'application/octet-stream',
+       'application/x-rar-compressed',
+       'application/rss+xml',
+       'application/msword',
+       'text/plain; charset=utf-8',
+       'text/html; charset=utf-8'
+	)`).Error
 	if err != nil {
 		panic(err)
 	}
 	for _, file := range files {
 
-		file.DB = db
-
 		// Create path
-		targetFile := file.GeneratePath()
-		err := os.MkdirAll(path.Dir(targetFile), 777)
+		err := os.MkdirAll(path.Dir(file.DestPath), 777)
 		if err != nil {
 			panic(err)
 		}
 
 		// Copy file
-		_, err = CopyFile(file.Path, targetFile)
+		_, err = CopyFile(file.Path, file.DestPath)
 		if err != nil {
 			panic(err)
 		}
 
 		// Check file and size
-		destFile, err := os.Stat(targetFile)
+		destFile, err := os.Stat(file.DestPath)
 		if err != nil {
 			panic(err)
 		}

@@ -2,7 +2,7 @@ package main
 
 import (
 	"crypto/sha1"
-	"encoding/hex"
+	"crypto/sha256"
 	"fmt"
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/pkg/errors"
@@ -36,7 +36,8 @@ type File struct {
 	Path       string   `gorm:"uniqueIndex"`
 	DirPath    string
 	MimeType   string
-	RootName   string
+	Hash       string
+	DestPath   string
 	ExifModel  string
 	ExifDate   time.Time
 	StatSize   int64
@@ -55,52 +56,18 @@ func (f *File) GeneratePath() string {
 	}
 	h := sha1.New()
 	h.Write([]byte(f.Path + strconv.Itoa(int(f.StatSize))))
-	fileHash := hex.EncodeToString(h.Sum(nil))
 	fileName := path.Base(f.Path)
 	fileName = strings.ReplaceAll(fileName, path.Ext(f.Path), "")
 	fileName = re.ReplaceAllString(fileName, "")
-	fileName = strings.ToLower(fmt.Sprintf("%s_%s%s", fileName, fileHash, path.Ext(f.Path)))
+	fileName = strings.ToLower(fmt.Sprintf("%s_%s%s", fileName, f.Hash, path.Ext(f.Path)))
 
-	// Get parent
-	var dir Dir
-	err := f.DB.First(&dir, "path = ?", f.DirPath).Error
-	if err != nil {
-		panic(err)
-	}
-	for dir.Level > 3 {
-		dir.ID = 0
-		err := f.DB.Debug().First(&dir, "path = ?", dir.ParentPath).Error
-		if err != nil {
-			panic(err)
-		}
-	}
-	postfix2 := path.Base(dir.Path)
-	for dir.Level > 2 {
-		dir.ID = 0
-		err := f.DB.Debug().First(&dir, "path = ?", dir.ParentPath).Error
-		if err != nil {
-			panic(err)
-		}
-	}
-	postfix1 := strings.TrimSpace(path.Base(dir.Path))
-	postfix1 = strings.TrimSpace(strings.ReplaceAll(postfix1, fileDate.Format("2006"), ""))
-	// /target/2005_Разгул/1_Январь/Автозвук Екб/file.jpg
-	targetFile := fmt.Sprintf("%s/%d_%s/%s/%s/%s", target, fileDate.Year(), postfix1, months.Replace(fileDate.Month().String()), postfix2, fileName)
+	// /target/2005/1_Январь/Автозвук Екб/file.jpg
+	targetFile := fmt.Sprintf("%s/%d/%s/%s/%s", target, fileDate.Year(), months.Replace(fileDate.Month().String()), f.Parent.LevelName, fileName)
 
 	return targetFile
 }
 
 func (f *File) Save() error {
-
-	// Find file in DB
-	var file File
-	err := f.DB.First(&file, "path = ?", f.Path).Error
-	if err != nil && err != gorm.ErrRecordNotFound {
-		return errors.WithStack(err)
-	}
-	if file.IsAnalyze {
-		return nil
-	}
 
 	// Open file
 	fs, err := os.Open(f.Path)
@@ -109,7 +76,26 @@ func (f *File) Save() error {
 	}
 	defer fs.Close()
 
+	// Get file hash
+	h := sha256.New()
+	if _, err := io.Copy(h, fs); err != nil {
+		return errors.WithStack(err)
+	}
+	hash := fmt.Sprintf("%x", h.Sum(nil))
+
+	// Find file in DB
+	var file File
+	err = f.DB.First(&file, "hash = ?", hash).Error
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return errors.WithStack(err)
+	}
+	if file.IsAnalyze {
+		return nil
+	}
+	file.Parent = f.Parent
+
 	// File
+	file.Hash = hash
 	file.Path = f.Path
 	file.DirPath = f.Parent.Path
 
@@ -127,6 +113,8 @@ func (f *File) Save() error {
 			file.ExifModel = ExifGet(x, exif.Model)
 			file.ExifDate, _ = x.DateTime()
 		}
+	case "application/vnd.ms-powerpoint":
+		return nil
 	}
 
 	// Get stat
@@ -149,6 +137,8 @@ func (f *File) Save() error {
 	if !file.ModDate.IsZero() && file.ModDate.Before(file.MainDate) {
 		file.MainDate = file.ModDate
 	}
+
+	file.DestPath = file.GeneratePath()
 
 	// Save
 	file.IsAnalyze = true
