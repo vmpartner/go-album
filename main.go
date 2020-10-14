@@ -48,19 +48,21 @@ func main() {
 	_ = db.AutoMigrate(&Dir{})
 
 	// Dir
-	dir := Dir{
-		Level: 0,
-		DB:    db,
-		Path:  source,
-	}
-	err = dir.Scan()
-	if err != nil {
-		log.Printf("%+v\n", err)
+	if false {
+		dir := Dir{
+			Level: 0,
+			DB:    db,
+			Path:  source,
+		}
+		err = dir.Scan()
+		if err != nil {
+			log.Printf("%+v\n", err)
+		}
 	}
 
 	// Copy files
 	var files []File
-	err = db.Find(&files, `stat_size > 250000 AND mime_type NOT IN (
+	err = db.Find(&files, `is_copy = false AND stat_size > 250000 AND mime_type NOT IN (
        'font/ttf',
        'application/pdf',
        'application/zip',
