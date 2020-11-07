@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/moskvorechie/logs"
 	"github.com/pkg/errors"
 	"gorm.io/gorm"
 	"io/ioutil"
@@ -23,7 +24,8 @@ type Dir struct {
 	Parent     *Dir     `gorm:"-"`
 	DB         *gorm.DB `gorm:"-"`
 	Level      int
-	Path       string `gorm:"uniqueIndex"`
+	Logger     logs.Log `gorm:"-"`
+	Path       string   `gorm:"uniqueIndex"`
 	ParentPath string
 	RootName   string
 	LevelName  string
@@ -61,17 +63,12 @@ func (d *Dir) Scan() error {
 	} else {
 		dir.LevelName = parent.LevelName
 	}
-	if dir.RootName == "Разное" {
-		return nil
-	}
 
 	// Save
 	err = d.DB.Save(&dir).Error
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
-	dev := 0
 
 	// Scan
 	files, err := ioutil.ReadDir(dir.Path)
@@ -81,12 +78,15 @@ func (d *Dir) Scan() error {
 	for _, f := range files {
 		if f.IsDir() {
 
+			d.Logger.InfoF("Read dir %s", dir.Path+"/"+f.Name())
+
 			// Dir
 			ds := Dir{
 				DB:         d.DB,
 				Level:      dir.Level + 1,
 				Path:       dir.Path + "/" + f.Name(),
 				Parent:     &dir,
+				Logger:     d.Logger,
 				ParentPath: dir.Path,
 			}
 			err = ds.Scan()
@@ -96,32 +96,22 @@ func (d *Dir) Scan() error {
 
 		} else {
 
+			totalFiles++
+
 			// Save file
 			file := File{
 				DB:      d.DB,
 				Path:    dir.Path + "/" + f.Name(),
 				Parent:  &dir,
 				DirPath: dir.Path,
+				Logger:  d.Logger,
 			}
 			err = file.Save()
 			if err != nil {
 				return errors.WithStack(err)
 			}
-
-			dev++
-			if dev >= 100 {
-				//break
-			}
-
 		}
-
 	}
-
-	//d.IsSync = true
-	//err = d.DB.Save(&d).Error
-	//if err != nil {
-	//	return errors.WithStack(err)
-	//}
 
 	return nil
 }

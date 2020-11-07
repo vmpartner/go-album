@@ -1,10 +1,10 @@
 package main
 
 import (
-	"crypto/sha1"
 	"crypto/sha256"
 	"fmt"
 	"github.com/gabriel-vasile/mimetype"
+	"github.com/moskvorechie/logs"
 	"github.com/pkg/errors"
 	"github.com/rwcarlsen/goexif/exif"
 	"github.com/rwcarlsen/goexif/mknote"
@@ -33,6 +33,7 @@ type File struct {
 	UpdatedAt  time.Time
 	Parent     *Dir     `gorm:"-"`
 	DB         *gorm.DB `gorm:"-"`
+	Logger     logs.Log `gorm:"-"`
 	Path       string   `gorm:"uniqueIndex"`
 	DirPath    string
 	MimeType   string
@@ -54,7 +55,7 @@ func (f *File) GeneratePath() string {
 	if fileDate.IsZero() {
 		fileDate = f.MainDate
 	}
-	h := sha1.New()
+	h := sha256.New()
 	h.Write([]byte(f.Path + strconv.Itoa(int(f.StatSize))))
 	fileName := path.Base(f.Path)
 	fileName = strings.ReplaceAll(fileName, path.Ext(f.Path), "")
@@ -76,11 +77,14 @@ func (f *File) Save() error {
 	}
 	defer fs.Close()
 
-	// Get file hash
-	h := sha256.New()
-	if _, err := io.Copy(h, fs); err != nil {
+	st, err := fs.Stat()
+	if err != nil {
 		return errors.WithStack(err)
 	}
+
+	// Get file hash
+	h := sha256.New()
+	h.Write([]byte(f.Path + strconv.Itoa(int(st.Size()))))
 	hash := fmt.Sprintf("%x", h.Sum(nil))
 
 	// Find file in DB
@@ -113,8 +117,6 @@ func (f *File) Save() error {
 			file.ExifModel = ExifGet(x, exif.Model)
 			file.ExifDate, _ = x.DateTime()
 		}
-	case "application/vnd.ms-powerpoint":
-		return nil
 	}
 
 	// Get stat

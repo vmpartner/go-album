@@ -1,21 +1,24 @@
 package main
 
 import (
+	"github.com/moskvorechie/logs"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	"log"
 	"os"
 	"path"
+	"runtime/debug"
 	"strings"
 )
 
 const (
-	source = "D:/photo/"
-	target = "D:/sorted/"
+	source = "D:/photo"
+	target = "D:/sorted"
 )
 
 var months *strings.Replacer
+var totalFiles int
 
 func init() {
 	months = strings.NewReplacer(
@@ -47,12 +50,31 @@ func main() {
 	_ = db.AutoMigrate(&File{})
 	_ = db.AutoMigrate(&Dir{})
 
+	// Logs
+	lgr, err := logs.New(&logs.Config{
+		App:      "go-album",
+		FilePath: "logs.txt",
+		Clear:    true,
+	})
+	if err != nil {
+		panic("failed to connect database")
+	}
+
+	// Exit on error
+	defer func() {
+		if err := recover(); err != nil {
+			lgr.Error("Fatal stack: \n" + string(debug.Stack()))
+			lgr.FatalF("Recovered Fatal %v", err)
+		}
+	}()
+
 	// Dir
-	if false {
+	if true {
 		dir := Dir{
-			Level: 0,
-			DB:    db,
-			Path:  source,
+			Level:  0,
+			Logger: lgr,
+			DB:     db,
+			Path:   source,
 		}
 		err = dir.Scan()
 		if err != nil {
@@ -60,20 +82,11 @@ func main() {
 		}
 	}
 
+	lgr.InfoF("Total files touched %d", totalFiles)
+
 	// Copy files
 	var files []File
-	err = db.Find(&files, `is_copy = false AND stat_size > 250000 AND mime_type NOT IN (
-       'font/ttf',
-       'application/pdf',
-       'application/zip',
-       'application/vnd.ms-excel',
-       'application/octet-stream',
-       'application/x-rar-compressed',
-       'application/rss+xml',
-       'application/msword',
-       'text/plain; charset=utf-8',
-       'text/html; charset=utf-8'
-	)`).Error
+	err = db.Find(&files, `is_copy = false`).Error
 	if err != nil {
 		panic(err)
 	}
