@@ -36,7 +36,7 @@ type Dir struct {
 func (d *Dir) Scan() error {
 
 	parent := &Dir{
-		Path: source,
+		Path: *source,
 	}
 	if d.Parent != nil {
 		parent = d.Parent
