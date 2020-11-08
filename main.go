@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	source *string
-	target *string
+	source string
+	target string
 )
 
 var months *strings.Replacer
@@ -38,9 +38,10 @@ func init() {
 }
 
 func init() {
-	source = flag.String("s", "", "Source")
-	target = flag.String("t", "", "Target")
-	if len(*source) <= 0 || len(*target) <= 0 {
+	source = *flag.String("s", "", "Source")
+	target = *flag.String("t", "", "Target")
+	flag.Parse()
+	if len(source) <= 0 || len(target) <= 0 {
 		panic("Please specify source and target")
 	}
 }
@@ -83,7 +84,7 @@ func main() {
 			Level:  0,
 			Logger: lgr,
 			DB:     db,
-			Path:   *source,
+			Path:   source,
 		}
 		err = dir.Scan()
 		if err != nil {
